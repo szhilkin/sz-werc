@@ -12,13 +12,12 @@ site=$SERVER_NAME
 sitedir=sites/$site
 headers=inc/headers.tpl
 body=index
-siteTitle=''
-siteSubTitle=''
-title=''
 template=_default
 sidebar=sidebar
 basedir=/gsoc/www
 baseuri=http://$site
+for(i in siteTitle siteSubTitle title extraHeaders)
+    $i = ''
 
 # Title
 fn gentitle {
@@ -77,8 +76,6 @@ fn genbody {
         markdown.pl < $body.md
     if not if ( test -f $body.tpl )
         template.awk $body.tpl | rc 
-    if not if ( ~ $body */blog/index */blog//index && ~ $#blogDirs 0 )
-        blogDirs = `{basename -d $body}
     if not if(~ $body */index && ~ $#blogDirs 0) {
             echo '<h1>' `{basename `{basename -d $body}}'</h1>'
             echo '<ul>'
@@ -92,7 +89,6 @@ fn genbody {
     if(! ~ $#blogDirs 0) {
         if ( ! ~ $blogTitle '' )
             echo '<h1>'$"blogTitle'</h1>'
-        echo '<div align="right">(<a href="index.rss">rss feed</a>)</div>'
         for ( f in `{ sortedBlogPostList $blogDirs } ) {
             title=`{basename $f | sed 's/^[0-9\-]*_(.*)\.md$/\1/; s/_/ /g' }
             du=`{ls -l $f}
@@ -120,11 +116,23 @@ for ( i in '' $args ) {
 }
 
 template=$sitedir/$template.tpl
-body=$sitedir/$body
 if (! ~ $#sidebar 0)
     sidebar=tpl/_inc/$sidebar.tpl
-if (test -d $body)
+
+body=$sitedir/$body
+rssuri=$uri
+if (test -d $body) {
     body=$body/index
+    rssuri=$rssuri/
+}
+
+if(! ~ $#blogDirs 0) {
+    rssuri=`{basename -d $uri}
+    rssuri=$baseuri`{cleanname $"rssuri^/index.rss}
+    extraHeaders=$"extraHeaders ^ \
+    	'<link rel="alternate" type="application/rss+xml" title="RSS" href="'$rssuri'">
+'
+}
 
 # RSS
 fn statpost {
