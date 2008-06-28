@@ -1,0 +1,245 @@
+#!/usr/local/plan9/bin/rc
+path=(. ./bin $PLAN9/bin /bin/ /usr/bin)
+
+uri = `{echo -n $REQUEST_URI | sed -e 's/\?.*//; s/[^a-zA-Z0-9_+\-\/]//g' -e '1q'}
+ifs='/' {
+	args = `{echo -n $uri}
+}
+cd ..
+
+# default config
+formatter=markdown.pl
+formatter=md_cache # markdown cacher
+site=$SERVER_NAME
+sitedir=sites/$site
+headers=inc/headers.tpl
+body=index
+template=_default
+sidebar=sidebar
+baseuri=http://$site/
+for(i in siteTitle siteSubTitle title extraHeaders)
+    $i = ''
+
+# Title
+fn gentitle {
+    echo '<h1 class="headerTitle"><a href="/">' ^ $"siteTitle ^ ' <span id="headerSubTitle">' ^ $"siteSubTitle ^ '</span></a></h1>'
+}
+
+# Don't change var name or trailing ';', some dirs change the filter!
+dirfilter = '/\/[._]/d; s,^\./,,; s,\.md$,,; s,\.html,,;'
+
+# Sidebar 
+fn menu {
+    lsArgs = ( '-F' )
+    # XXX will not work properly for $#blogDirs > 1 and matching is hackish
+    if ( (! ~ $#inBlog 0) || ! ~ $#blogDirs 0 && (~ $blogDirs^/ *$1 *$1/) ) { # Work in progress XXX
+    	lsArgs = ($lsArgs -r)
+    }
+
+    ls $lsArgs $1 | sed $dirfilter | awk -F/ '
+    BEGIN { print "<ul class=\"sidebar\">" }
+    END { print "</ul>" }
+    /^([a-zA-Z0-9+_\-]+[\/*]?)+$/ && $NF != "index" {
+        isdir = match($0, "/$")
+        sub("[*/]$", "")
+
+        path = bname = $0
+        sub("^(.*/)?([0-9]+_)?", "", bname)
+        gsub("_", " ", bname)
+
+        if(isdir) {
+            bname = bname "/"
+            path = $0 "/"
+        }
+
+        if(index(ENVIRON["REQUEST_URI"], "/" path) == 1) {
+            if(isdir) {
+                print "<li><a href=\"/" path "\" class=\"thisPage\">&raquo;<i> " bname "</i></a>"
+                system("rc -c ''menu " path "''")
+            } else {
+                print "<li><a href=\"/" path "\" class=\"thisPage\">&raquo;<i> " bname "</i></a>"
+            }
+        } else 
+            print "<li><a href=\"/" path "\">&rsaquo; " bname "</a>"
+
+        print "</li>"
+    }'
+}
+
+fn gensidebar {
+    @{
+        cd $sitedir
+        menu .
+    }
+}
+
+fn sortedBlogPostList {
+    # the /./ is added so we can sort -t. and order only the file name
+    if (! ~ $#* 0)
+        ls $*^'/./' | grep '[0-9]+.*\.md$'| sort -r -t. +1
+}
+
+fn blogTitle {
+    title=`{basename $1 | sed 's/^[0-9\-]*_(.*)\.md$/\1/; s/_/ /g' }
+    permlink= `{echo $1 | sed 's,^/[a-z/]*www/,/,; s,^sites/[^/]*/*/,/,; s/\.md$//' }
+    du=`{ls -l $1}
+    echo '##<a href="' $"permlink '">' $"title^'</a> *('By $du(4) Last mod: $du(7 8 9) ')*'
+}
+
+# Body
+fn genbody {
+    if ( test -f $body.md ) {
+        if ( ! ~ $#inBlog 0 )
+            blogTitle $body.md | $formatter
+        $formatter < $body.md
+    }
+    if not if ( test -f $body.tpl )
+        template.awk $body.tpl | rc $rcargs
+    if not if ( test -f $body.txt ) {
+        echo '<pre>'
+	# XXX Insering a blank line between lines in input is good for fortunes.txt, but probably not for other .txt files
+	# XXX Words are not broken, even if they are way beyond 82 chars long
+        cat $body.txt |sed 's/$/\n/g; s/</\&gt;/g; s/>/\&lt;/g' |fmt -l 82 -j
+        echo '</pre>'
+    }
+    if not if ( test -f $body.html )
+        cat $body.html | /bin/sed '0,/<[Bb][Oo][Dd][Yy][^>]*>/d; /<\/[Bb][Oo][Dd][Yy]>/,$d' 
+    if not if (~ $body *.html && test -f $body )
+        cat $body | /bin/sed -i '0,/<body[^>]*>/d;/<\/body>/,$d' 
+    if not if ( ~ $body */[bB]log/index */[bB]log//index && ~ $#blogDirs 0 )
+        blogDirs = `{basename -d $body}
+    if not if ( test -f pub/^$reqpath^.tpl )
+        template.awk pub/^$reqpath^.tpl | rc $rcargs
+    if not if(~ $body */index && ~ $#blogDirs 0) {
+            echo '<h1 style="text-transform: capitalize;">' `{basename -d $body|sed -e 's,.*//,,g' -e 's,/$,,' -e 's,/, / ,g' } '</h1>'
+            echo '<ul style="text-transform: capitalize;">'
+            ls -F `{ basename -d $body } | sed -e $dirfilter' s,^'$sitedir'/.*/([^$].*),<li><a href="\1">\1</a></li>,'
+            echo '</ul>'
+    }
+    if not if(~ $#blogDirs 0) {
+        #echo 'Status: 404 Not Found\n\n' # should go before starting to print body
+        template.awk inc/404.tpl | rc $rcargs
+    }
+
+    if(! ~ $#blogDirs 0) {
+        if ( ! ~ $blogTitle '' )
+            echo '<h1>'$"blogTitle'</h1>'
+	echo '<div style="text-align:right">(<a href="index.rss">rss feed</a>)</div>'
+        for ( f in `{ sortedBlogPostList $blogDirs } ) {
+            #title=`{basename $f | sed 's/^[0-9\-]*_(.*)\.md$/\1/; s/_/ /g' }
+            #du=`{ls -l $f}
+            #echo '##' $title '*('By $du(4) Last mod: $du(7 8 9) ')*'
+            blogTitle $f
+            cat $f 
+            echo 
+        } | $formatter
+    }
+}
+
+
+. etc/initrc
+
+if (! ~ $args '') {
+    #title=$args($#args)
+    title=$args
+    title=`{echo $title | sed -e 's/ / - /g' -e 's/_/ /g' }
+    body=$uri
+}
+
+fpath=$sitedir
+for ( i in ('' $args) ) {
+    fpath = $fpath/$i
+    # We don't want blog settings to cascade into posts, note that we are inBlog instead
+    if ( ! ~ $#blogDirs 0 && ! ~ $body */indexrss */[bB]log */[bB]log/ ) {
+        inBlog = $blogDirs
+        blogDirs = () 
+    }
+
+    if ( test -f $fpath/_config )
+        . $fpath/_config
+
+    if ( ~ $#blogDirs 0 && ~ $#inBlog 0 && ~ $i [Bb]log )
+        inBlog = 'yes'
+}
+
+
+# Redirections and other preprocessing
+if (~ $#redirectPermanent 1) {
+	echo 'Status: 301 Moved Permanantly
+Location: '^$"redirectPermanent^'
+
+'
+}
+
+
+# Template/body selection
+template=$sitedir/$template.tpl
+if (! ~ $#sidebar 0)
+    sidebar=tpl/_inc/$sidebar.tpl
+
+reqpath=$body
+body=$sitedir/$body
+rssuri=$uri
+if (test -d $body) {
+    body=$body/index
+    rssuri=$rssuri/
+}
+
+if(! ~ $#blogDirs 0) {
+    rssuri=`{basename -d $uri}
+    rssuri=$baseuri`{cleanname $"rssuri^/index.rss}
+    extraHeaders=$"extraHeaders ^ \
+    	'<link rel="alternate" type="application/rss+xml" title="RSS" href="'$rssuri'" />
+'
+}
+
+
+
+fn template {
+    template.awk | rc $rcargs |
+    awk '{
+        buf = buf $0"\n"
+        if(length(buf) > 8192) {
+            printf "%s", buf
+            buf = ""
+        }
+    }
+    END{ printf "%s", buf }'
+}
+
+if(! ~ $REQUEST_URI */index.rss) {
+	cat $headers $template | template
+	echo '</body></html>'
+	exit
+}
+
+# RSS
+if ( ~ $body */[bB]log/indexrss */[bB]log//indexrss && ~ $#blogDirs 0 )
+    blogDirs = `{basename -d $body}
+
+
+uri = `{echo $uri | sed 's/indexrss$//'}
+uri=$baseuri$"uri
+
+fn statpost {
+	f = $1
+	uri = `{echo $f | sed 's,^'$sitedir',,'}
+	title=`{basename $f | sed 's/^[0-9\-]*_(.*)\.md$/\1/; s/_/ /g' }
+	date=`{/bin/date -Rd `{basename $f |sed 's/(^[0-9\-]*).*/\1/; s/-[0-9]$//'}}
+	stat=`{stat -c '%Y %U' $f}
+	mdate=`{/bin/date -Rd @$stat(1)}
+	uri=$baseuri^`{cleanname `{echo -n $uri | sed 's/\.(md|tpl)//g'}}
+	by=$stat(2)
+	ifs=() {
+		summary=`{awk -v max'='1024 '{
+			nc += 1 + length;
+			if(nc > max) {
+				print substr($0, 1, nc - max) "..."
+				exit
+			}
+			print
+		}' $f |fmt -j| sed 's/\]\]>/Fucking goddamn XML garbage/g'}
+	}
+}
+
+cat pub/feeds/rss20.tpl | template
