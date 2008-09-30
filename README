@@ -1,0 +1,44 @@
+werc - a minimalist document management system
+----------------------------------------------
+
+Werc is a CMS designed to be simple to use, simple to setup, and not get on the
+way while allowing users easy customization and implement new functionality.
+
+For more information see the official website: http://repo.cat-v.org/werc/
+
+
+Installation
+------------
+
+Requirements:
+
+* Plan 9 from User Space - http://plan9.us
+* An http server that can handle CGIs
+
+Instructions:
+
+Untar, configure httpd to use bin/controller.rc as a cgi-script, and create a
+directory for your web site under sites/ where you can start to add content
+right away. 
+
+For general configuration options copy etc/initrc to initrc.local and customize
+it to your liking. Site (and directory) specific options can be set in a
+_config file inside the site's directory.
+
+For details see the documentation section of the website.
+
+Contact
+-------
+
+For comments, suggestions, bug reports or patches join the werc9 list in
+google groups: http://groups.google.com/group/werc9 or the irc channel #plan9
+in irc.freenode.org
+
+If you have a public website that uses werc I would love to hear about it and
+get feedback about you experience setting it up.
+
+
+License
+-------
+
+Werc is in the public domain.

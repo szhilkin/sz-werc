@@ -1,0 +1,371 @@
+#!/usr/local/plan9/bin/rc
+. ./cgilib.rc
+cd ..
+
+forbidden_uri_chars='[^a-zA-Z0-9_+\-\/\.]'
+response_format=html
+
+fn get_lib_file {
+    wantedfile = $1
+    if (test -f $sitedir/_werc/lib/$wantedfile)
+    	echo -n $sitedir/_werc/lib/$wantedfile
+    if not if(! ~ $masterSite 0 && test -f sites/$masterSite/_werc/lib/$wantedfile)
+    	echo -n       sites/$masterSite/_werc/lib/$wantedfile
+    if not if (test -f lib/$wantedfile)
+    	echo -n        lib/$wantedfile
+
+    # DEPRECATED
+    if not if (~ $#disableDeprecated 0 && test -f $sitedir/_inc/$wantedfile) {
+    	echo -n $sitedir/_inc/$wantedfile
+        dprint DEPRECATION WARNING: Using file in depracted path: $sitedir/_inc/$wantedfile XXX
+    }
+    if not if(~ $#disableDeprecated 0 && ! ~ $masterSite 0 && test -f sites/$masterSite/_inc/$wantedfile) {
+    	echo -n sites/$masterSite/_inc/$wantedfile
+        dprint DEPRECATION WARNING: Using file in depracted path: sites/$masterSite/_inc/$wantedfile XXX
+    }
+    if not if (~ $#disableDeprecated 0 && test -f inc/$wantedfile) {
+    	echo -n inc/$wantedfile
+        dprint DEPRECATION WARNING: Using file in depracted path: inc/$wantedfile XXX
+    }
+}
+
+# DEPRECATED
+fn get_inc_file {
+    get_lib_file $*
+    dprint DEPRECATION WARNING: Called get_inc_file, should call get_lib_file
+}
+
+
+# Title
+fn gentitle {
+    echo '<h1 class="headerTitle"><a href="/">' ^ $"siteTitle ^ ' <span id="headerSubTitle">' ^ $"siteSubTitle ^ '</span></a></h1>'
+}
+
+# Don't change var name or trailing ';', some dirs change the filter!
+dirfilter = '/\/[._]/d; /'^$forbidden_uri_chars^'/d; /\/robots.\txt$/d; /\/sitemap\.txt$/d; s,^\./,,; s,\.md$,,; s,\.html,,; s,\.txt,,; '
+
+# To be used from config files
+fn hide_paths {
+    for(i in $*) {
+	dirfilter = $dirfilter^'/^'$i'$/d; '
+    }
+}
+
+# Sidebar 
+fn menu {
+    lsArgs = ('-F')
+    # XXX will not work properly for $#blogDirs > 1 and matching is hackish
+    # XXX Work in progress, doesn't work well enough to be usable: too inconsistent, doesn't handle corner cases well at all
+    #if ( ! ~ $#blogDirs 0 && ~ $blogDirs^/ *$1 *$1/ ) { 
+    #	lsArgs = ($lsArgs -r)
+    #}
+    ls $lsArgs $1 | sed $dirfilter | awk -F/ '
+    BEGIN { print "<ul class=\"side-bar\">" }
+    END { print "</ul>" }
+    # Should add \. to the list of allowed chars in file names, but need to find a way to filter out .txt and so on
+    /^([a-zA-Z0-9+_\-]+[\/*]?)+$/ && $NF != "index" {
+        isdir = match($0, "/$")
+        sub("[*/]$", "")
+
+        path = bname = $0
+        sub("^(.*/)?([0-9]+_)?", "", bname)
+        gsub("_", " ", bname)
+
+        if(isdir) {
+            bname = bname "/"
+            path = $0 "/"
+        }
+
+        if(index(ENVIRON["REQUEST_URI"] "/", "/" path) == 1) {
+            if(isdir) {
+                print "<li><a href=\"/" path "\" class=\"thisPage\">&raquo;<i> " bname "</i></a>"
+                system("rc -c ''menu " path "''")
+            } else {
+                print "<li><a href=\"/" path "\" class=\"thisPage\">&raquo;<i> " bname "</i></a>"
+            }
+        } else 
+            print "<li><a href=\"/" path "\">&rsaquo; " bname "</a>"
+
+        print "</li>"
+    }'
+}
+
+fn gensidebar {
+    @{
+        cd $sitedir
+        menu .
+    }
+}
+
+fn sortedBlogPostList {
+    # the /./ is added so we can sort -t. and order only the file name
+    if (! ~ $#* 0)
+        ls $*^'/./' | grep '/[0-9]+.*\.md$'| sort -r -t. +1
+}
+
+fn gen_blog_post_title {
+    title=`{basename $1 | sed 's/^[0-9\-]*_(.*)\.md$/\1/; s/_/ /g' }
+    permlink= `{echo $1 | sed 's,^/[a-z/]*www/,/,; s,^sites/[^/]*/*/,/,; s/\.md$//' }
+    du=`{ls -l $1}
+    by = ''
+    if (! ~ $#blogAuthor 0)
+        by='By '$"blogAuthor
+    if not if (~ $#blogDirs 1)
+        by='By '$du(4)
+    echo '##<a href="'^$"permlink^'">' $"title^'</a> *( '$by Last mod: $du(7 8 9) ' )*'
+}
+
+
+
+
+# Handlers
+fn set_handler {
+    handler = $1
+    shift
+    handler_args = $*
+}
+
+fn md_handler { cat $* | $formatter }
+
+fn tpl_handler { template $1 }
+
+fn html_handler {
+    cat $1 | /bin/sed '0,/<[Bb][Oo][Dd][Yy][^>]*>/d; /<\/[Bb][Oo][Dd][Yy]>/,$d' 
+}
+
+fn txt_handler {
+    echo '<pre>'
+    # XXX Insering a blank line between lines in input is good for fortunes.txt, but maybe not for other .txt files
+    # XXX Words are not broken, even if they are way beyond 82 chars long
+    cat $1 |sed 's/$/\n/g; s/</\&lt;/g; s/>/\&gt;/g' |fmt -l 82 -j
+    echo '</pre>'
+}
+
+fn dir_listing_handler {
+    body = $1
+    echo '<h1 style="text-transform: capitalize;">' `{basename -d $body|sed -e 's,.*//,,g' -e 's,/$,,' -e 's,/, / ,g' } '</h1>'
+    echo '<ul style="text-transform: capitalize;">'
+    ls -F `{ basename -d $body } | sed -e $dirfilter' s,^'$sitedir'/.*/([^$].*),<li><a href="\1">\1</a></li>,'
+    echo '</ul>'
+}
+
+fn 404_handler { template `{get_lib_file 404.tpl } }
+
+fn blog_dir_handler {
+    blogDirs = $*
+
+    if (! ~ $blogTitle '')
+        echo '<h1>'$"blogTitle'</h1>' #" stupid vim syntax highlighting ;P
+
+    echo '<div style="text-align:right">(<a href="index.rss">rss feed</a>)</div>'
+
+    for (f in `{ sortedBlogPostList $blogDirs }) {
+        gen_blog_post_title $f
+        cat $f 
+        echo 
+    } | $formatter
+}
+
+fn blog_post_handler {
+
+    gen_blog_post_title $1 | $formatter
+    $formatter < $1
+}
+
+fn quote_html {
+    sed 's/</\&lt;/g; s/>/\&gt;/g'
+}
+fn debug_handler {
+    echo '<pre>'
+    env | quote_html
+    echo ---------------------
+    umask
+    echo '</pre>'
+}
+
+
+fn select_handler {
+
+    if (test -f $body.md) {
+        if (! ~ $#inBlog 0)
+            set_handler blog_post_handler $body.md
+        if not
+            set_handler md_handler $body.md
+
+        if (! ~ $#allowComments 0 && ~ $REQUEST_METHOD POST) {
+            get_post_args comment_user_name comment_text
+            ddir = $body.md_werc/comments/
+            umask 002
+            mkdir -m 775 -p $ddir
+            d = `{date -n} # Obvious race
+            { echo '% user_name='^$comment_user_name'
+ 
+'^$comment_text } > $ddir/$d.rec
+        }
+    }
+    if not if (~ $body */_debug)
+        set_handler debug_handler 
+    if not if (test -f $body.tpl)
+        set_handler tpl_handler $body.tpl
+
+    if not if (test -f $body.html)
+        set_handler html_handler $body.html
+
+    # Handle explicit .html urls, this should not happen (the web server will usually handle this anyway)
+    # XXX We probably should setup a permanent redirect to $body|sed 's/.html$//' here
+    if not if (~ $body *.html && test -f $body)
+        set_handler html_handler $body
+
+    # Rss feeds. TODO: we should check that the request is for a real blog dir
+    if not if (~ $REQUEST_URI */index.rss) {
+        uri = `{echo $uri | sed 's/index.rss$//'}
+        if (~ $blogDirs 0)
+            blogDirs = $sitedir^$uri
+        uri=$baseuri$"uri
+        master_template=feeds/rss20.tpl
+        response_format=raw
+    }
+
+    # Blog handler
+    if not if (~ $body */[bB]log/index */[bB]log//index || ! ~ $#blogDirs 0) {
+        if (~ $#blogDirs 0)
+            blogDirs = `{basename -d $body}
+
+        rssuri=`{basename -d $uri}
+        rssuri=$baseuri`{cleanname $"rssuri^/index.rss}
+        extraHeaders=$"extraHeaders ^ \
+    	'<link rel="alternate" type="application/rss+xml" title="RSS" href="'$rssuri'" />
+'
+
+        set_handler blog_dir_handler $blogDirs
+    }
+
+    # Global tpl (eg sitemap.tpl)
+    if not if (test -f lib/^$uri^.tpl)
+        set_handler tpl_handler lib/^$uri^.tpl
+
+    if not if (test -f $body.txt)
+        set_handler txt_handler $body.txt
+
+    # Dir listing
+    if not if(~ $body */index)
+        set_handler dir_listing_handler $body
+
+    # File not found
+    if not {
+        set_handler 404_handler $body
+        dprint 'NOT FOUND: '$SERVER_NAME^$REQUEST_URI^' - '^$"HTTP_REFERER^' - '^$"HTTP_USER_AGENT
+        echo 'Status: 404 Not Found'
+    }
+
+}
+
+
+fn genbody {
+    # Actually execute request
+    $handler $handler_args
+}
+
+
+# Careful, the proper p9p path might not be set until initrc.local is sourced
+path=(. $PLAN9/bin ./bin/ /bin/ /usr/bin) 
+
+site=$SERVER_NAME
+headers=lib/headers.tpl
+master_template=default_master.tpl
+sidebar=sidebar
+baseuri=http://$site/
+for(i in siteTitle siteSubTitle pageTitle extraHeaders)
+    $i = ''
+
+. etc/initrc
+
+if(test -f etc/initrc.local)
+    . etc/initrc.local
+
+
+# Parse request URL
+uri = `{echo -n $REQUEST_URI | sed -e 's/\?.*//; s/'^$forbidden_uri_chars^'//g; s/\.\.*/./g;' -e '1q'}
+ifs='/' {
+	args = `{echo -n $uri}
+}
+
+
+if(! ~ $#debug 0)
+    dprint '  ' $SERVER_NAME^$REQUEST_URI^' - '^$"HTTP_USER_AGENT
+
+
+if (! ~ $args '') {
+    if (~ $args($#args) 'index')
+        perm_redirect `{ echo $REQUEST_URI | sed 's,/index$,/,' }
+        
+    pageTitle=`{echo $args | sed -e 's/ / - /g' -e 's/_/ /g'}
+    body=$uri
+}
+if not {
+    body='/'
+}
+
+fpath=$sitedir
+for (i in ('' $args)) {
+    fpath = $fpath/$i
+    # We don't want blog settings to cascade into posts, note that we are inBlog instead
+    if (! ~ $#blogDirs 0 && ! ~ $body */index.rss */[bB]log */[bB]log/) {
+        inBlog = $blogDirs
+        blogDirs = () 
+    }
+
+    if (test -f $fpath/_config)
+        . $fpath/_config # DEPRECATED
+    if (test -f $fpath/_werc/config)
+        . $fpath/_werc/config
+
+    if (~ $#blogDirs 0 && ~ $#inBlog 0 && ~ $i [Bb]log)
+        inBlog = 'yes'
+}
+
+# Redirections and other preprocessing
+if (~ $#redirectPermanent 1)
+    perm_redirect $"redirectPermanent
+
+if not if (~ $#redirectPermanent 2 && {echo $SERVER_NAME^$REQUEST_URI|grep -s $redirectPermanent(1) }) {
+    # Experimental regexp sub-based redirect, probably should find a nicer interface
+    # For now only used at sites/harmful.cat-v.org/software/OO_programming/_config
+    to=`{echo $SERVER_NAME^$REQUEST_URI|sed 's@'^$redirectPermanent(1)^'@'^$redirectPermanent(2)^'@'}
+    if(! ~ $to $REQUEST_URI)
+        perm_redirect $to
+}
+
+# Set Page title
+if(~ $pageTitle '')
+	pageTitle=$siteTitle^' '^$siteSubTitle
+if not
+	pageTitle=$"pageTitle^' | '^$"siteTitle^' '^$"siteSubTitle
+
+
+body=$sitedir/$body
+if (test -d $body) {
+    if(! ~ $body */)
+    	perm_redirect $REQUEST_URI^'/'
+    body=$body/index
+}
+
+select_handler
+
+# Template/body selection
+master_template= `{get_lib_file $master_template}
+
+if(~ $master_template 0) {
+    dprint DEPRECATION WARNING: using $sitedir/_default.tpl, should move to _werc/lib/XXX
+    master_template=$sitedir/_default.tpl
+}
+
+
+if(~ $response_format html) {
+    # Is awk_buffer really useful?
+	template $headers $master_template | awk_buffer
+	echo '</body></html>'
+}
+if not if (~ $response_format raw) {
+	template < $master_template 
+}
