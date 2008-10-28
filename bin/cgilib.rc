@@ -1,0 +1,246 @@
+##############################################
+# Useful CGI functions
+
+NEW_LINE = '
+'
+
+fn dprint { echo $* >[1=2] }
+
+fn escape_html { sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g' $* }
+
+fn perm_redirect {
+    echo 'Status: 301 Moved Permanantly
+Location: '^$1^'
+
+'
+    exit
+}
+
+fn get_post_args {
+    if(~ $#POST_ARGS 0) {
+        ifs='&
+'       for(pair in `{cat}) {
+            pair = `{echo -n $pair | sed 's/=/\&/'} \
+            # Maybe we should urldecode on the first pass?
+            POST_ARGS = ($POST_ARGS $pair)
+            ifs=() \
+            if(~ $pair(1) $*)
+                $pair(1) = `{echo -n $pair(2) | urldecode | tr -d ''}
+        }
+    }
+    if not {
+        pa = $POST_ARGS
+        while(! ~ $#pa 0) {
+            ifs=() \
+            if(~ $pa(1) $*)
+                $pa(1) = `{echo -n $pa(2) | urldecode | tr -d ''}
+            pa = $pa(3-)
+        }
+    }
+}
+
+# Is this really useful?
+fn awk_buffer {
+    awk '{
+        buf = buf $0"\n"
+        if(length(buf) > 8192) {
+            printf "%s", buf
+            buf = ""
+        }
+    }
+    END{ printf "%s", buf }'
+}
+
+fn urldecode {
+awk '
+BEGIN {
+    hextab ["0"] = 0; hextab ["8"] = 8;
+    hextab ["1"] = 1; hextab ["9"] = 9;
+    hextab ["2"] = 2; hextab ["A"] = hextab ["a"] = 10
+    hextab ["3"] = 3; hextab ["B"] = hextab ["b"] = 11;
+    hextab ["4"] = 4; hextab ["C"] = hextab ["c"] = 12;
+    hextab ["5"] = 5; hextab ["D"] = hextab ["d"] = 13;
+    hextab ["6"] = 6; hextab ["E"] = hextab ["e"] = 14;
+    hextab ["7"] = 7; hextab ["F"] = hextab ["f"] = 15;
+}
+{
+    decoded = ""
+    i   = 1
+    len = length ($0)
+    while ( i <= len ) {
+        c = substr ($0, i, 1)
+        if ( c == "%" ) {
+            if ( i+2 <= len ) {
+                c1 = substr ($0, i+1, 1)
+                c2 = substr ($0, i+2, 1)
+                if ( hextab [c1] == "" || hextab [c2] == "" ) {
+                    print "WARNING: invalid hex encoding: %" c1 c2 | "cat >&2"
+                } else {
+                    code = 0 + hextab [c1] * 16 + hextab [c2] + 0
+                    c = sprintf ("%c", code)
+                    i = i + 2
+                }
+            } else {
+                print "WARNING: invalid % encoding: " substr ($0, i, len - i)
+            }
+        } else if ( c == "+" ) {
+            c = " "
+        }
+        decoded = decoded c
+        ++i
+    }
+    printf decoded
+}
+'
+}
+
+# Cookies
+fn set_cookie {
+    # TODO: should check input values more carefully
+    name = $1
+    val = $2
+    extraHttpHeaders = ($extraHttpHeaders 'Set-cookie: '^$"name^'='^$"val^'; path=/;')
+}
+fn get_cookie {
+    ifs=';' { co = `{ echo $HTTP_COOKIE } }
+
+    #for(c in $co)
+    #    if(~ $c $1^'='*)  # This matching doesn't work
+    #        echo $c|sed 's/[^=]*=//' 
+
+    # WARNING: we might be adding a trailing new line
+    { for(c in $co) echo $c} | sed -n 's/[^=]*=//p' 
+}
+
+
+
+##############################################
+# More werc-specific functions
+
+fn template { template.awk $* | rc $rcargs }
+
+# .rec parsing
+fn parse_rec {
+    ifs='
+' for(i in `{sed 's/% *//g; /^$/q' < $1}) {
+        v = `{echo -n $i | sed 's/^/rec_/; s/=.*//;'} 
+        $v = `{echo -n $i | sed 's/^[^=]*=//'}
+    }
+    ifs=() { rec_data = `{sed -n '/^[^%]./,$p' < $1} }
+}
+
+
+# Auth code
+
+# Cookie format: WERC_USER: name:timestamp:hash(name.timestamp.password)
+# login_user can't be used from a template because it sets a cookie 
+fn login_user {
+    # Note: get_user can use an existing cookie, so we might end up setting an existing cookie
+    if(get_user $*)
+        set_cookie werc_user $"logged_user^':0:'^$"logged_password
+}
+
+# Checks if we are logged in, if called with an argument, we check group membership too
+fn check_user {
+    if(! get_user)
+        status='Not logged in'
+    if not if (! ~ $#1 0 && ! grep -s '^'^$logged_user^'$' etc/groups/$1)
+        status=User $logged_user not in group $1
+    if not
+        true
+}
+
+# If not logged in, try to get user login info from POST info or from cookie
+fn get_user {
+    if (~ $#logged_user 0) {
+        if (~ $#* 2) {
+            user_name = $1 
+            user_password $2
+        }
+        if not if(~ $REQUEST_METHOD POST)
+            get_post_args user_name user_password
+
+        if(~ $#user_name 0) { 
+            ifs=':' { cu = `{get_cookie werc_user|tr -d $NEW_LINE} }
+            if(! ~ $#cu 0) {
+                user_name = $cu(1) 
+                user_password  = $cu(3)
+            }
+        }
+        auth_user $user_name $user_password
+    }
+    if not
+        true
+}
+
+# Check if user_name and user_password represent a valid user account
+# If valid, 'log in' by setting logged_user
+fn auth_user {
+    user_name = $1
+    user_password = $2
+
+    pfile = 'etc/users/'^$"user_name^'/password'
+    if (~ $#user_name 0 || ~ $#user_password 0)
+        status='Auth: missing user name or pass: '^$"user_name^' / '^$"user_password
+    if not if(! test -f $pfile)
+        status='Auth: cant find '^$pfile
+    if not if (! ~ $user_password `{cat $pfile})
+        status='Auth: Pass '$user_password' doesnt match '^`{cat $pfile}
+    if not {
+        logged_user = $user_name
+        logged_password = $user_password
+        dprint Auth: success
+    }
+}
+
+
+
+# Blog stuff
+
+fn make_blog_post {
+    bdir = $1
+    btitle = $2
+    btext = $3
+    if(! ~ 0 $#1 $#2 $#3) {
+        date=`{/bin/date +%F}
+
+        n = 1
+        for(f in $bdir^$date^'-'*) {
+            i = `{echo -n $f | sed -n 's,^.*/'$date'-([0-9]+)_.*,\1,p'|tr -d $NEW_LINE}
+            if(! ~ $#i 0 && test $i -ge $n)
+                n = `{hoc -e $i'+1'}
+        }
+        btitle = `{echo -n $"btitle | sed 's/[ 	]+/_/g; 1q'}
+
+        echo $btext > $bdir^'/'^$"date^'-'^$"n^_$"btitle.md 
+    }
+    if not
+        status=Missing blog post arguments $1 $2 $3 
+}
+
+
+# --------
+#
+#app_blog_methods = ( _post index.rss )
+#fn app_blog__post {
+#    echo
+#}
+#
+#app_blog___default {
+#    if (~ $blog)
+#    call_app blogpost
+#}
+#
+## --
+#app_blogpost_methods = ( comment  _edit )
+#
+#fn app_blogpost_comment {
+#    call_app comments
+#}
+#
+## --
+#app_comments_methods = ( _post _edit )
+#
+#fn app_comments___default {
+#
+#}
