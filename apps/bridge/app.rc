@@ -1,0 +1,30 @@
+comment_file_types=(md html)
+fn bridge_init {
+    if(! ~ $#enable_comments 0 && ! ~ `{ls $local_path.$comment_file_types >[2]/dev/null|wc -l} 0) {
+        ll_add handlers_body_foot template apps/bridge/foot.tpl
+        if(get_post_args comment_text) {
+            d=`{date -n} # FIXME Obvious race
+            d=$local_path^'_werc/comments/'^$d/
+
+            u=$logged_user
+            if(~ $#logged_user 0) {
+                get_post_args comment_user_name comment_user_password
+                # XXX Should do this too if user not in required group
+                if(! login_user $comment_user_name $comment_user_password) {
+                    u=$comment_user_name':'$comment_user_password
+                    d=$d^'_pending'
+                }
+                if not
+                    u = $logged_user
+            }
+
+            umask 002
+            if(mkdir -m 775 -p $d) { # Rudimentary perm checking
+                echo $u > $d/user
+                echo $comment_text > $d/body
+            }
+        }
+    }
+
+}
+
