@@ -1,4 +1,4 @@
-#!/usr/bin/env rc
+#!/bin/rc
 
 fn fltr_cache {
     a=()

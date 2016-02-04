@@ -1,4 +1,4 @@
-#!/usr/local/plan9/bin/rc
+#!/bin/rc
 . ./cgilib.rc
 . ./werclib.rc
 . ./wercconf.rc
@@ -15,7 +15,7 @@ dirfilter='s/\*$//; s,/+\./+,/,g; s,^\./,,; /\/[._][^\/]/d; /'$forbidden_uri_cha
 dirclean=' s/\.(md|html|txt)$//; '
 
 # Careful, the proper p9p path might not be set until initrc.local is sourced
-path=(. $PLAN9/bin ./bin /bin /usr/bin) 
+path=(. /bin ./bin)
 
 headers=lib/headers.tpl
 res_tail='</body></html>'
@@ -35,14 +35,14 @@ for(a in $werc_apps)
 
 fn werc_exec_request {
     site=$SERVER_NAME
-    base_url=http://$site
+    base_url=http://$site:$SERVER_PORT
     sitedir=$sitesdir/$site
     master_template=`{get_lib_file default_master.tpl}
     current_date_time=`{date}
 
     # Note: $REQUEST_URI is not officially in CGI 1.1, but seems to be de-facto
     # Note: We only urldecode %5F->'_' because some sites (stackoverflow.com?) urlencode it in their links,
-    # perhaps we should completely urldecode the whole url.
+    # perhaps we should completel urldecode the whole url.
     req_path=`{echo -n $REQUEST_URI | sed 's/\?.*//; s!//+!/!g; s/%5[Ff]/_/g; s/'^$forbidden_uri_chars^'//g; s/\.\.*/./g; 1q'}
     req_url=$base_url^$req_path
     local_path=$sitedir$req_path
@@ -61,15 +61,9 @@ fn werc_exec_request {
     if(~ $local_path */) {
         if(test -d $local_path)
             local_path=$local_path^'index'
-
-	# If path has a trailing /, and a plain file exists matching that 'name.*'
-	# remove the traling / and redirect to 'name' .
         # XXX: This redir might step on apps with synthetic dirs.
-        if not {
-		# TODO: Maybe we should be smarter about how to check for existing files
-		if(ls `{basename -d $local_path}^'.*' >/dev/null >[2]/dev/null)
-		    perm_redirect `{echo $req_path|sed 's,/+$,,'}
-	}
+        if not if(ls `{basename -d $local_path}^* >/dev/null >[2]/dev/null)
+            perm_redirect `{echo $req_path|sed 's,/+$,,'}
     }
     if not if(~ $req_path *'.' *',' *';' *':')
         perm_redirect `{echo $req_path | sed 's/[.,;:)]$//'}
@@ -128,17 +122,17 @@ fn werc_exec_request {
 
     for(h in $extraHttpHeaders)
         echo $h
-    echo 'Content-Type: '^$http_content_type
+    echo Content-Type: $http_content_type
     echo # End of HTTP headers
 
     if(! ~ $#debug 0)
-        dprint $"SERVER_NAME^$"REQUEST_URI - $"HTTP_USER_AGENT - $"REQUEST_METHOD - $"handler_body_main - $"master_template
+		dprint $"SERVER_NAME^$"REQUEST_URI - $"HTTP_USER_AGENT - $"REQUEST_METHOD - $"handler_body_main - $"master_template
 
     if(~ $REQUEST_METHOD HEAD)
         exit
-    
-    template $headers $master_template | awk_buffer
+
+    template $headers $master_template # | awk_buffer
     echo $res_tail
 }
 
-werc_exec_request # >[2]/tmp/wercdebug.log
+werc_exec_request
