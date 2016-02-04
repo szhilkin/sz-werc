@@ -14,7 +14,7 @@ Installation
 Requirements:
 
 * An http server that can handle CGIs
-* Plan 9 from User Space: http://plan9.us - Or 9base-5 or later: http://tools.suckless.org/9base
+* Plan 9 from User Space: http://swtch.com/plan9port - Or 9base-tip: http://tools.suckless.org/9base
 
 Note: Werc by default expects the Plan 9 tools to be installed under
 /usr/local/plan9/bin/, if you have installed them elsewhere you will need to
@@ -46,7 +46,7 @@ For general configuration options copy etc/initrc to etc/initrc.local and
 customize it as needed. Site (and directory) specific options can be set in a
 sites/example.com/_werc/config file inside the site's directory. To customize
 templates and included files you can store your own version of the files in
-lib/ under sites/example.com/_werc/lib
+lib/ under sites/example.com/_werc/lib.
 
 The source tree for the werc website is included under sites/werc.cat-v.org as
 an example, feel free to use it as a template for your own site.
@@ -58,21 +58,17 @@ http://werc.cat-v.org/docs/
 Contact
 -------
 
-For comments, suggestions, bug reports or patches join the werc9 list in
-google groups: http://groups.google.com/group/werc9 or the irc channel #cat-v
-in irc.freenode.org
+For comments, suggestions, bug reports or patches join the werc mailing list
+at: http://werc.cat-v.org or the irc channel #cat-v in irc.freenode.org
 
 If you have a public website that uses werc I would love to hear about it and
 get feedback about you experience setting it up.
 
-If you want to be notified of new releases see the News section of the website
-or use Freshmeat: http://freshmeat.net/projects/werc/
-
 Thanks
 ------
 
-Garbeam, Kris Maglione, sqweek, soul9, mycroftiv, maht, yiyus and many others
-for their ideas, patches, testing and other contributions.
+Garbeam, Kris Maglione, sqweek, soul9, mycroftiv, maht, yiyus, cinap_lenrek,
+khm and many others for their ideas, patches, testing and other contributions.
 
 
 License

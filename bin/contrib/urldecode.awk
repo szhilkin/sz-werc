@@ -1,4 +1,4 @@
-#!/usr/bin/awk -f
+#!/bin/awk -f
 BEGIN {
 	hextab ["0"] = 0; hextab ["8"] = 8;
 	hextab ["1"] = 1; hextab ["9"] = 9;
