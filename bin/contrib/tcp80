@@ -1,5 +1,5 @@
 #!/bin/rc
 # For use with listen(8).
 # Change rc-httpd path to match your system.
-# Change /dev/null to location of logfile.
-exec /home/sl/www/werc/bin/contrib/rc-httpd/rc-httpd >>[2]/dev/null
+# Change /var/log/www to location of logfile.
+exec /home/sl/www/werc/bin/contrib/rc-httpd/rc-httpd >>[2]/var/log/www
