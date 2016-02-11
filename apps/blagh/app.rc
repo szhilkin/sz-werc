@@ -26,7 +26,7 @@ fn blagh_init {
         if(check_user $conf_blog_editors) {
             editor_mode=on
             if(~ $"post_arg_date '')
-                post_date=`{date -i|sed 's,-,/,g'}  # date -i is 9front/9base only
+                post_date=`{datei|sed 's,-,/,g'}
             if not
                 post_date=$post_arg_date
             ll_add handlers_bar_left echo '<a href="'$blagh_uri'new_post">Make a new post</a>'
