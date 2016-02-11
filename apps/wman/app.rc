@@ -79,7 +79,7 @@ fn wman_out_filter {
 }
 
 fn wman_default_out_filter {
-    # Using GNU col here to remove nroffs garbage (eg., from .ft B); p9p has no col(1) :(
+	# col -x syntax is the same for UNIX and Plan 9.
     escape_html \
     | sed 's!([\.\-a-zA-Z0-9]+)\(('^`{echo $wman_cat_list|tr ' ' '|'}^')\)!<a href="../\2/\1">&</a>!g' \
     | awk '/^$/ {if(n != 1) print; n=1; next} /./ {n=0; print}' \
