@@ -1,5 +1,6 @@
 #!/bin/rc
 rc_httpd_dir=/home/sl/www/werc/bin/contrib/rc-httpd
+libdir = $rc_httpd_dir/lib
 path=($PLAN9/bin $rc_httpd_dir/handlers $PATH)
 cgi_path=$PLAN9/bin
 SERVER_PORT=80 # default for CGI scripts, may be overridden by the Host header
