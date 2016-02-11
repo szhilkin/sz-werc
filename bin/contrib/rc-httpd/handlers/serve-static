@@ -31,7 +31,7 @@ case *.gif
 case *.png
         type=image/png
 case *
-        type=`{file -i $full_path || file -m $full_path}	# GROSS
+		type=`{file -m $full_path || file -i $full_path}        # GROSS
 }
 max_age=3600	# 1 hour
 echo 'HTTP/1.1 200 OK'^$cr
