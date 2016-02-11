@@ -5,7 +5,7 @@
 fn statpost {
     f = $1
 
-    updated = `{date -t `{mtime $f | awk '{print $1}'}} # date -t is 9front/9base only
+    updated = `{datet `{mtime $f | awk '{print $1}'}}
     post_uri=$base_url^`{cleanname `{echo $f | sed -e 's!^'$sitedir'!!'}}^'/'
     title=`{read $f/index.md}
     # Not used: date=`{/bin/date -Rd `{basename $f |sed 's/(^[0-9\-]*).*/\1/; s/-[0-9]$//'}}
@@ -16,7 +16,7 @@ fn statpost {
     #ifs=() { summary=`{cat $f/index.md | crop_text 1024 ... | $formatter } }
     ifs=() { summary=`{cat $f/index.md | strip_title_from_md_file | ifs=$difs {$formatter} } }
 }
-updated = `{date -t} # date -t is 9front/9base only
+updated = `{datet}
 %}
 
 <feed xmlns="http://www.w3.org/2005/Atom"
