@@ -1,5 +1,5 @@
 #!/bin/rc
-PATH_INFO=`{echo $PATH_INFO | urlencode -d}
+PATH_INFO=`{echo $PATH_INFO | awk -f $libdir/urlencode.awk}
 full_path=$"FS_ROOT^$"PATH_INFO
 full_path=$"full_path
 if(! test -d $full_path){
