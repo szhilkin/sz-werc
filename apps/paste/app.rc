@@ -1,33 +1,47 @@
-fn conf_enable_paste {
-        paste_url=$conf_wd
-        paste_dir=`{pwd}
-        conf_enable_app paste
+fn conf_enable_wercpaste {
+	paste_url=$conf_wd
+	if (~ $#paste_dir 0) { paste_dir=`{pwd} }
+	conf_enable_app wercpaste
 }
 
-fn paste_init {
-        if (~ $REQUEST_METHOD POST && ~ $post_arg_url url && ~ $req_path $paste_url ) { # incoming paste 
-                now=`{ date -n }
-                cksum=`{ echo $"post_arg_paste | sum | awk '{ print $1 }' }
-                if (~ $cksum '1715a8eb' ) { # empty paste; discard
-                        post_redirect $base_url^$paste_url
-                }
-                if not {  # save and redirect
-                        # TODO: stop using echo
-                        echo $"post_arg_paste > $paste_dir^/^$now^.^$cksum
-#cat<<EOF > $paste_dir^/^$now^.^$cksum
-#$"post_arg_paste
-#EOF
-                        #post_redirect $base_url^$paste_url^$now^.^$cksum
-                        echo 'Content-type: text/plain'; echo ''; exec echo $base_url^$paste_url^$now^.^$cksum
-                }
-        } 
-        if not { # show a paste if there is one
-                if (test -r $werc_root/$local_path && ~ $QUERY_STRING raw ) { 
-                                echo 'Content-type: text/plain'; echo ''; exec cat $werc_root/$local_path
-                        } 
-        }
+fn wercpaste_init {
+	if (~ $REQUEST_METHOD POST && ~ $post_arg_url url && ~ $req_path $paste_url ) { # incoming paste 
+		now=`{ date -n }
+		cksum=`{ echo $"post_arg_paste | sum | awk '{ print $1 }' }
+		if (~ $cksum '1715a8eb' ) { # empty paste; discard
+			post_redirect $base_url^$paste_url
+		}
+		if not {  # save and redirect
+			# TODO: stop using echo
+			# env var size limit is 16kb, this thing dies with larger input.
+			echo $"post_arg_paste > $paste_dir^/^$now^.^$cksum
+			# uncomment the following line to redirect to the pasted file
+			#post_redirect $base_url^$paste_url^$now^.^$cksum
+			# uncomment the following line instead to just return the url
+			echo 'Content-type: text/plain'; echo ''; exec echo $base_url^$paste_url^$now^.^$cksum
+		}
+	} 
+	if not { # show a paste if there is one
+		if (test -r $werc_root/$local_path && ~ $QUERY_STRING raw ) { 
+				echo 'Content-type: text/plain'; echo ''; exec cat $werc_root/$local_path
+			} 
+	}
 
-# if we haven't done anything by now, we don't care.  we just exit and let
-# werc handle it from here.
+# drop a textbox 
+	if (~ $REQUEST_METHOD GET ) { handler_body_main='begforpaste' }
+
+}
+
+fn begforpaste {
+	echo '<h1>Pastebin</h1>
+	<article>
+	<h3 style="text-align: center">pasted data is not publically indexed</h3>
+	<form action="'$paste_url'" method="post" style="margin:2em">
+	<textarea name="paste" cols="120" rows="20" required style="display: block; margin: 0 auto 0 auto" ></textarea><br>
+	<input type="submit" name="submit" value="SUBMIT" style="display: block; margin: 0 auto 0 auto" ><br><br>
+	<span style="display: none"><input type="text" name="url" value="url" > (do not change) </span>
+	</form>
+	</article>
+	'
 }
 
